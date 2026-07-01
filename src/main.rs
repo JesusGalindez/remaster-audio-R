@@ -45,11 +45,11 @@ struct AppState {
 
 #[tokio::main]
 async fn main() {
-    // Check local dependencies
-    if let Err(e) = remasterer::get_ffmpeg_binary() {
+    // Check local dependencies (async)
+    if let Err(e) = remasterer::get_ffmpeg_binary().await {
         eprintln!("Dependency warning: {}", e);
     }
-    if let Err(e) = remasterer::get_rnnoise_model() {
+    if let Err(e) = remasterer::get_rnnoise_model().await {
         eprintln!("Dependency warning: {}", e);
     }
 
@@ -300,7 +300,7 @@ async fn api_remaster(
             ai_start_sec,
             preview,
             cb,
-        );
+        ).await;
 
         let mut lock = tasks_clone.write().await;
         if let Some(t) = lock.get_mut(&task_id_clone) {

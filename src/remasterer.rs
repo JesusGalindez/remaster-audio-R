@@ -16,10 +16,9 @@ pub fn get_workspace_dir() -> PathBuf {
 }
 
 /// Dynamic platform detection for FFmpeg download
-pub fn get_ffmpeg_binary() -> Result<String, String> {
+pub async fn get_ffmpeg_binary() -> Result<String, String> {
     let workspace = get_workspace_dir();
     let bin_dir = workspace.join("bin");
-    fs::create_dir_all(&bin_dir).map_err(|e| format!("Failed to create bin dir: {}", e))?;
 
     let is_windows = env::consts::OS == "windows";
     let exe_ext = if is_windows { ".exe" } else { "" };
@@ -28,6 +27,8 @@ pub fn get_ffmpeg_binary() -> Result<String, String> {
     if ffmpeg_path.exists() {
         return Ok(ffmpeg_path.to_string_lossy().into_owned());
     }
+
+    fs::create_dir_all(&bin_dir).map_err(|e| format!("Failed to create bin dir: {}", e))?;
 
     // Determine download URL
     let target_arch = env::consts::ARCH;
@@ -44,8 +45,9 @@ pub fn get_ffmpeg_binary() -> Result<String, String> {
     let download_url = format!("{}{}", BASE_FFMPEG_URL, filename);
     println!("Downloading FFmpeg static build for your platform from {}...", download_url);
 
-    // Download compressed bytes
-    let response = reqwest::blocking::get(&download_url)
+    // Download compressed bytes (async)
+    let response = reqwest::get(&download_url)
+        .await
         .map_err(|e| format!("Failed to download FFmpeg: {}", e))?;
     
     if !response.status().is_success() {
@@ -53,14 +55,17 @@ pub fn get_ffmpeg_binary() -> Result<String, String> {
     }
 
     let compressed_bytes = response.bytes()
+        .await
         .map_err(|e| format!("Failed to read FFmpeg response bytes: {}", e))?;
 
-    // Decompress gzip on the fly
+    // Decompress gzip (offloaded to threadpool)
     println!("Decompressing FFmpeg binary...");
-    let mut decoder = GzDecoder::new(&compressed_bytes[..]);
-    let mut decompressed_bytes = Vec::new();
-    decoder.read_to_end(&mut decompressed_bytes)
-        .map_err(|e| format!("Failed to decompress FFmpeg Gzip stream: {}", e))?;
+    let decompressed_bytes = tokio::task::spawn_blocking(move || {
+        let mut decoder = GzDecoder::new(&compressed_bytes[..]);
+        let mut bytes = Vec::new();
+        decoder.read_to_end(&mut bytes).map(|_| bytes)
+    }).await.map_err(|e| e.to_string())?
+      .map_err(|e| format!("Failed to decompress FFmpeg Gzip stream: {}", e))?;
 
     // Write file
     let mut file = File::create(&ffmpeg_path)
@@ -81,22 +86,24 @@ pub fn get_ffmpeg_binary() -> Result<String, String> {
     Ok(ffmpeg_path.to_string_lossy().into_owned())
 }
 
-/// Downloads and returns the RNNoise vocal cleaning model path
-pub fn get_rnnoise_model() -> Result<String, String> {
+/// Downloads and returns the RNNoise vocal cleaning model path (async)
+pub async fn get_rnnoise_model() -> Result<String, String> {
     let workspace = get_workspace_dir();
     let models_dir = workspace.join("models");
-    fs::create_dir_all(&models_dir).map_err(|e| format!("Failed to create models dir: {}", e))?;
 
     let model_path = models_dir.join("cb.rnnn");
     if model_path.exists() {
         return Ok(model_path.to_string_lossy().into_owned());
     }
 
+    fs::create_dir_all(&models_dir).map_err(|e| format!("Failed to create models dir: {}", e))?;
+
     println!("Downloading RNNoise neural vocal model...");
-    let response = reqwest::blocking::get(DEFAULT_MODEL_URL)
+    let response = reqwest::get(DEFAULT_MODEL_URL)
+        .await
         .map_err(|e| format!("Failed to download vocal model: {}", e))?;
     
-    let bytes = response.bytes().map_err(|e| format!("Failed to read model bytes: {}", e))?;
+    let bytes = response.bytes().await.map_err(|e| format!("Failed to read model bytes: {}", e))?;
     let mut file = File::create(&model_path).map_err(|e| format!("Failed to create model file: {}", e))?;
     file.write_all(&bytes).map_err(|e| format!("Failed to write model file: {}", e))?;
 
@@ -152,7 +159,7 @@ where
 }
 
 /// Core DSP remastering function
-pub fn process_file<F>(
+pub async fn process_file<F>(
     input_path: &str,
     output_path: &str,
     sync_ms: i32,
@@ -165,8 +172,8 @@ pub fn process_file<F>(
 where
     F: Fn(&str, u32),
 {
-    let ffmpeg = get_ffmpeg_binary()?;
-    let model_path = get_rnnoise_model()?;
+    let ffmpeg = get_ffmpeg_binary().await?;
+    let model_path = get_rnnoise_model().await?;
     
     // Inject bin/ path into system PATH dynamically for child sub-processes
     let workspace = get_workspace_dir();
