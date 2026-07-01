@@ -57,6 +57,11 @@ async fn main() {
         tasks: Arc::new(RwLock::new(HashMap::new())),
     });
 
+    let cors = tower_http::cors::CorsLayer::new()
+        .allow_origin(tower_http::cors::Any)
+        .allow_methods(tower_http::cors::Any)
+        .allow_headers(tower_http::cors::Any);
+
     let app = Router::new()
         // Serve static web pages
         .route("/", get(serve_index))
@@ -66,6 +71,7 @@ async fn main() {
         .route("/api/status/:task_id", get(api_status))
         .route("/api/stream-status/:task_id", get(api_stream_status))
         .route("/api/download/:filename", get(api_download))
+        .layer(cors)
         .with_state(state);
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:8000").await.unwrap();

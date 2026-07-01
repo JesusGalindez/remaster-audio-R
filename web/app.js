@@ -1,3 +1,7 @@
+const API_BASE = window.location.origin.includes('tauri') || window.location.protocol === 'file:' || !window.location.origin.includes('8000')
+  ? 'http://127.0.0.1:8000' 
+  : '';
+
 // Element selectors
 const videoDropZone = document.getElementById('drop-zone-video');
 const audioDropZone = document.getElementById('drop-zone-audio');
@@ -144,7 +148,7 @@ async function startProcessing(preview = false) {
     updateProgress("Starting...", "Sending file details to server...", 0);
 
     try {
-        const response = await fetch('/api/remaster', {
+        const response = await fetch(`${API_BASE}/api/remaster`, {
             method: 'POST',
             body: formData
         });
@@ -167,7 +171,7 @@ btnProcess.addEventListener('click', () => startProcessing(false));
 
 // --- SSE Event Handler ---
 function listenToTaskProgress(taskId) {
-    const eventSource = new EventSource(`/api/stream-status/${taskId}`);
+    const eventSource = new EventSource(`${API_BASE}/api/stream-status/${taskId}`);
 
     eventSource.onmessage = (event) => {
         const data = JSON.parse(event.data);
@@ -181,7 +185,7 @@ function listenToTaskProgress(taskId) {
         } else if (data.status === "completed") {
             eventSource.close();
             // Configure download & preview buttons
-            const fileUrl = `/api/download/${data.output_file}`;
+            const fileUrl = `${API_BASE}/api/download/${data.output_file}`;
             previewPlayer.src = fileUrl;
             btnDownload.href = fileUrl;
             btnDownload.download = data.output_file;

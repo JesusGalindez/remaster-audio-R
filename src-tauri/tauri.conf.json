@@ -4,8 +4,7 @@
   "version": "0.1.0",
   "identifier": "com.jesusgalindez.remasteraudio",
   "build": {
-    "frontendDist": "../web",
-    "devUrl": "http://localhost:8000"
+    "frontendDist": "../web"
   },
   "app": {
     "windows": [
