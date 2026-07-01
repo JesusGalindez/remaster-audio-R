@@ -1,0 +1,26 @@
+# Compilados y binarios locales
+bin/
+models/
+venv/
+.venv/
+__pycache__/
+*.pyc
+
+# Archivos temporales y exportaciones
+temp/
+exports/
+uploads/
+*.log
+folder_action_error.log
+
+# Archivos pesados e instaladores
+*.zip
+*.dmg
+*.tar.gz
+
+# Configuraciones del sistema y del IDE
+.DS_Store
+.vscode/
+.idea/
+.agents/
+graphify-out/

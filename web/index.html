@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube Audio Remasterer</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="glass-bg"></div>
+    <div class="glow-orb glow-1"></div>
+    <div class="glow-orb glow-2"></div>
+
+    <div class="container">
+        <header>
+            <div class="logo">
+                <span class="gradient-text">YouTube Audio Remasterer</span>
+                <span class="badge">AI-Powered</span>
+            </div>
+            <p class="subtitle">Clean noise, equalize, dynamic compression and perfect lip-sync in seconds.</p>
+        </header>
+
+        <main class="grid">
+            <!-- Left Side: Config & Input -->
+            <section class="card glass-card upload-section">
+                <h2>Configure & Upload</h2>
+                
+                <div class="input-group">
+                    <label>Select Video File</label>
+                    <div id="drop-zone-video" class="drop-zone">
+                        <div class="drop-zone-content">
+                            <span class="icon">🎬</span>
+                            <span class="text">Drag video here or <span class="highlight">browse</span></span>
+                            <span class="file-name" id="video-file-name">No file chosen</span>
+                        </div>
+                        <input type="file" id="file-video" accept="video/*" class="file-input">
+                    </div>
+                </div>
+
+                <div class="input-group">
+                    <label>Optional: External High-Quality Audio (Auto-Sync)</label>
+                    <div id="drop-zone-audio" class="drop-zone drop-zone-secondary">
+                        <div class="drop-zone-content">
+                            <span class="icon">🎙️</span>
+                            <span class="text">Drag mic audio here or <span class="highlight">browse</span></span>
+                            <span class="file-name" id="audio-file-name">No file chosen</span>
+                        </div>
+                        <input type="file" id="file-audio" accept="audio/*" class="file-input">
+                    </div>
+                </div>
+
+                <div class="or-separator"><span>OR PROCESS LOCAL PATH</span></div>
+
+                <div class="input-group">
+                    <label for="local-path">Direct Local File Path (Ultra Fast - Saves Upload Time)</label>
+                    <input type="text" id="local-path" placeholder="e.g. /Users/username/Movies/my_video.mp4">
+                </div>
+
+                <div class="settings-panel">
+                    <div class="settings-toggle-container">
+                        <h3>Lip-Sync Correction</h3>
+                        <label class="switch-container">
+                            <input type="checkbox" id="toggle-ai-sync">
+                            <span class="switch-slider-round"></span>
+                            <span class="switch-label">AI Auto-Sync (Lips)</span>
+                        </label>
+                    </div>
+                    <div id="manual-sync-container" class="slider-container">
+                        <div class="slider-header">
+                            <span>Audio Delay</span>
+                            <span id="sync-val" class="sync-value">0 ms</span>
+                        </div>
+                        <input type="range" id="sync-slider" min="-1000" max="1000" value="0" step="10">
+                        <div class="slider-labels">
+                            <span>-1000ms (Audio Early)</span>
+                            <span>0ms (Sync)</span>
+                            <span>+1000ms (Audio Delayed)</span>
+                        </div>
+                        <div class="fine-tune">
+                            <button type="button" class="btn btn-sm" onclick="adjustSync(-10)">-10ms</button>
+                            <button type="button" class="btn btn-sm" onclick="adjustSync(10)">+10ms</button>
+                            <button type="button" class="btn btn-sm btn-outline" onclick="resetSync()">Reset</button>
+                        </div>
+                    </div>
+                    <div id="ai-sync-info-container" class="ai-info-container hidden">
+                        <p class="ai-info-text">✨ **AI Snippet Mode**: SyncNet will track mouth movements in an optimized 15s snippet (320x240 @ 15fps) to compute the exact offset instantly (saving 90% processing time) and apply it losslessly to the entire video.</p>
+                        <div class="ai-param-field">
+                            <label for="ai-start-sec">🎬 AI Snippet Start Time (seconds):</label>
+                            <input type="number" id="ai-start-sec" value="5" min="0" max="7200" step="1">
+                            <span class="helper-text">Escoge un segundo del video donde tu boca se vea bien iluminada y estés hablando directo a la cámara.</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="action-buttons">
+                    <button type="button" id="btn-preview" class="btn btn-outline btn-lg">Generate 15s Preview</button>
+                    <button type="button" id="btn-process" class="btn btn-primary btn-lg">Process Full Video</button>
+                </div>
+            </section>
+
+            <!-- Right Side: Status & Export -->
+            <section class="card glass-card output-section">
+                <h2>Dashboard Status</h2>
+                
+                <!-- Idle State -->
+                <div id="state-idle" class="status-state">
+                    <div class="idle-content">
+                        <div class="waveform-animation">
+                            <span class="bar"></span>
+                            <span class="bar"></span>
+                            <span class="bar"></span>
+                            <span class="bar"></span>
+                            <span class="bar"></span>
+                        </div>
+                        <h3>Ready to Remaster</h3>
+                        <p>Upload a video or specify a path to begin vocal enhancement and normalisation.</p>
+                    </div>
+                </div>
+
+                <!-- Processing State -->
+                <div id="state-processing" class="status-state hidden">
+                    <div class="processing-content">
+                        <div class="spinner-ring">
+                            <div class="ring"></div>
+                            <span id="progress-percent" class="percent">0%</span>
+                        </div>
+                        <h3 id="progress-title">Processing Video...</h3>
+                        <p id="progress-msg">Preparing audio extraction...</p>
+                        
+                        <div class="progress-bar-container">
+                            <div id="progress-fill" class="progress-bar-fill" style="width: 0%;"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Completed State -->
+                <div id="state-completed" class="status-state hidden">
+                    <div class="completed-content">
+                        <div class="success-icon">✓</div>
+                        <h3>Remaster Complete!</h3>
+                        <p id="success-desc">Loudness successfully normalized to -14.0 LUFS (-1.0 dBTP).</p>
+
+                        <div class="preview-player-container">
+                            <video id="preview-player" controls></video>
+                        </div>
+
+                        <div class="stats-grid">
+                            <div class="stat-card">
+                                <span class="label">Target Loudness</span>
+                                <span class="value">-14.0 LUFS</span>
+                            </div>
+                            <div class="stat-card">
+                                <span class="label">Max True Peak</span>
+                                <span class="value">-1.0 dBTP</span>
+                            </div>
+                            <div class="stat-card">
+                                <span class="label">AI De-noise</span>
+                                <span class="value">RNNoise Active</span>
+                            </div>
+                        </div>
+
+                        <a id="btn-download" href="#" class="btn btn-primary btn-lg download-btn">
+                            Download Remastered Video
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Failed State -->
+                <div id="state-failed" class="status-state hidden">
+                    <div class="failed-content">
+                        <div class="error-icon">✗</div>
+                        <h3>Processing Failed</h3>
+                        <p id="error-msg" class="error-msg">An error occurred during video rendering.</p>
+                        <button type="button" class="btn btn-outline btn-lg" onclick="showIdleState()">Try Again</button>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+numpy
+scipy
+soundfile
+pyloudnorm
+fastapi
+uvicorn
+jinja2
+python-multipart
+requests
+torch
+torchvision
+syncnet-python
+opencv-python
+opencv-contrib-python-headless
