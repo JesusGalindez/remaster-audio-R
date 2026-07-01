@@ -211,7 +211,7 @@ where
     
     // Escape model path spaces for FFmpeg syntax
     let escaped_model = model_path.replace("\\", "/").replace(":", "\\:");
-    let filter_str = format!("arnndn=m='{}',highpass=f=80,loudnorm=i=-14:tp=-1:lra=7", escaped_model);
+    let filter_str = format!("arnndn=m='{}',highpass=f=80,loudnorm=i=-14:tp=-1:lra=7,alimiter=limit=0.95", escaped_model);
 
     let mut cmd_audio = Command::new(&ffmpeg);
     cmd_audio.arg("-y").arg("-i").arg(&audio_input);
@@ -268,6 +268,7 @@ where
            .arg("-c:a").arg("aac")
            .arg("-b:a").arg("384k")
            .arg("-ar").arg("48000")
+           .arg("-movflags").arg("+faststart")
            .arg("-shortest")
            .arg(output_path);
 

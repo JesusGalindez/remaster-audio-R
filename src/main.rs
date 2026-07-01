@@ -37,10 +37,23 @@ struct TaskStatus {
     updated_at: f64,
 }
 
+struct Job {
+    task_id: String,
+    input_path: String,
+    output_path: String,
+    sync_ms: i32,
+    sync_ref: Option<String>,
+    auto_sync_lips: bool,
+    ai_start_sec: i32,
+    preview: bool,
+    output_filename: String,
+}
+
 type TaskMap = Arc<RwLock<HashMap<String, TaskStatus>>>;
 
 struct AppState {
     tasks: TaskMap,
+    tx: tokio::sync::mpsc::Sender<Job>,
 }
 
 #[tokio::main]
@@ -53,10 +66,84 @@ async fn main() {
         eprintln!("Dependency warning: {}", e);
     }
 
+    let tasks_map: TaskMap = Arc::new(RwLock::new(HashMap::new()));
+    let (tx, rx) = tokio::sync::mpsc::channel::<Job>(100);
+
     let state = Arc::new(AppState {
-        tasks: Arc::new(RwLock::new(HashMap::new())),
+        tasks: tasks_map.clone(),
+        tx,
+    });
+    // Spawn background sequential job queue worker
+    let tasks_worker = tasks_map.clone();
+    tokio::spawn(async move {
+        let mut rx = rx;
+        while let Some(job) = rx.recv().await {
+            // Update status to "processing"
+            {
+                let mut lock = tasks_worker.write().await;
+                if let Some(t) = lock.get_mut(&job.task_id) {
+                    t.status = "processing".to_string();
+                    t.message = "Initializing processing...".to_string();
+                    t.updated_at = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs_f64();
+                }
+            }
+
+            let tasks_for_cb = tasks_worker.clone();
+            let task_id_for_cb = job.task_id.clone();
+            let cb = move |msg: &str, percent: u32| {
+                let mut lock = tasks_for_cb.blocking_write();
+                if let Some(t) = lock.get_mut(&task_id_for_cb) {
+                    t.status = "processing".to_string();
+                    t.message = msg.to_string();
+                    t.percent = percent;
+                    t.updated_at = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs_f64();
+                }
+            };
+
+            let result = remasterer::process_file(
+                &job.input_path,
+                &job.output_path,
+                job.sync_ms,
+                job.sync_ref.as_deref(),
+                job.auto_sync_lips,
+                job.ai_start_sec,
+                job.preview,
+                cb,
+            ).await;
+
+            let mut lock = tasks_worker.write().await;
+            if let Some(t) = lock.get_mut(&job.task_id) {
+                match result {
+                    Ok(_) => {
+                        t.status = "completed".to_string();
+                        t.message = "Processing finished successfully!".to_string();
+                        t.percent = 100;
+                        t.output_file = Some(job.output_filename);
+                    }
+                    Err(e) => {
+                        t.status = "failed".to_string();
+                        t.message = e;
+                        t.percent = 100;
+                    }
+                }
+                t.updated_at = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs_f64();
+            }
+        }
     });
 
+    // Spawn background task memory garbage collection loop (runs every hour)
+    let tasks_gc = tasks_map.clone();
+    tokio::spawn(async move {
+        loop {
+            tokio::time::sleep(Duration::from_secs(3600)).await;
+            let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs_f64();
+            let mut lock = tasks_gc.write().await;
+            lock.retain(|_, v| {
+                let age = now - v.updated_at;
+                age < 43200.0 // Keep only tasks from last 12 hours
+            });
+        }
+    });
     let cors = tower_http::cors::CorsLayer::new()
         .allow_origin(tower_http::cors::Any)
         .allow_methods(tower_http::cors::Any)
@@ -261,10 +348,22 @@ async fn api_remaster(
     let output_filename = format!("{}{}", prefix, filename);
     let output_path = export_dir.join(&output_filename).to_string_lossy().into_owned();
 
+    // Calculate current queue position
+    let queue_len = {
+        let lock = state.tasks.read().await;
+        lock.values().filter(|t| t.status == "queued" || t.status == "processing" || t.status == "starting").count()
+    };
+
+    let (status_str, message_str) = if queue_len > 0 {
+        ("queued".to_string(), format!("Waiting in queue. Position: #{}", queue_len))
+    } else {
+        ("starting".to_string(), "Initializing worker thread...".to_string())
+    };
+
     // Initialize state
     let task_status = TaskStatus {
-        status: "starting".to_string(),
-        message: "Initializing worker thread...".to_string(),
+        status: status_str,
+        message: message_str,
         percent: 0,
         output_file: None,
         updated_at: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs_f64(),
@@ -272,54 +371,19 @@ async fn api_remaster(
     
     state.tasks.write().await.insert(task_id.clone(), task_status);
 
-    // Spawn background task
-    let tasks_clone = state.tasks.clone();
-    let task_id_clone = task_id.clone();
-    let output_filename_clone = output_filename.clone();
-
-    tokio::spawn(async move {
-        let tasks_for_cb = tasks_clone.clone();
-        let task_id_for_cb = task_id_clone.clone();
-
-        let cb = move |msg: &str, percent: u32| {
-            let mut lock = tasks_for_cb.blocking_write();
-            if let Some(t) = lock.get_mut(&task_id_for_cb) {
-                t.status = "processing".to_string();
-                t.message = msg.to_string();
-                t.percent = percent;
-                t.updated_at = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs_f64();
-            }
-        };
-
-        let result = remasterer::process_file(
-            &input_path,
-            &output_path,
-            sync_ms,
-            ref_path.as_deref(),
-            auto_sync_lips,
-            ai_start_sec,
-            preview,
-            cb,
-        ).await;
-
-        let mut lock = tasks_clone.write().await;
-        if let Some(t) = lock.get_mut(&task_id_clone) {
-            match result {
-                Ok(_) => {
-                    t.status = "completed".to_string();
-                    t.message = "Processing finished successfully!".to_string();
-                    t.percent = 100;
-                    t.output_file = Some(output_filename_clone);
-                }
-                Err(e) => {
-                    t.status = "failed".to_string();
-                    t.message = e;
-                    t.percent = 100;
-                }
-            }
-            t.updated_at = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs_f64();
-        }
-    });
+    // Send job to background worker queue
+    let job = Job {
+        task_id: task_id.clone(),
+        input_path,
+        output_path,
+        sync_ms,
+        sync_ref: ref_path,
+        auto_sync_lips,
+        ai_start_sec,
+        preview,
+        output_filename: output_filename.clone(),
+    };
+    let _ = state.tx.send(job).await;
 
     axum::Json(serde_json::json!({
         "task_id": task_id,
