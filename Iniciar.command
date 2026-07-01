@@ -30,7 +30,22 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-# 3. Iniciar el servidor web y abrir el navegador
+# 3. Compilar el servidor de Rust si no existe
+if [ ! -f "target/release/remaster_audio" ]; then
+    echo "Compilando el motor en Rust para máxima velocidad (solo la primera vez)..."
+    # Asegurar que las variables de entorno de Rust estén en el PATH
+    if [ -f "$HOME/.cargo/env" ]; then
+        source "$HOME/.cargo/env"
+    fi
+    cargo build --release
+    if [ $? -ne 0 ]; then
+        echo "ERROR: Falló la compilación del motor en Rust."
+        read -p "Presiona ENTER para salir..."
+        exit 1
+    fi
+fi
+
+# 4. Iniciar el servidor web y abrir el navegador
 echo "[3/3] Iniciando servidor y abriendo Dashboard..."
 echo "Abre tu navegador en: http://localhost:8000"
 echo ""
@@ -40,5 +55,5 @@ echo "=========================================================="
 # Abrir el navegador por defecto
 open "http://localhost:8000"
 
-# Iniciar la aplicación
-python3 app.py
+# Iniciar la aplicación en Rust
+./target/release/remaster_audio

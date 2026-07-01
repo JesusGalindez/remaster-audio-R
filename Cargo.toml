@@ -1,0 +1,22 @@
+[package]
+name = "remaster_audio"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tokio = { version = "1.35", features = ["full"] }
+axum = { version = "0.7.4", features = ["multipart"] }
+tower-http = { version = "0.5.0", features = ["fs", "cors"] }
+rust-embed = "8.2.0"
+reqwest = { version = "0.11.23", features = ["json", "stream", "blocking"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+rustfft = "6.1.0"
+num-complex = "0.4.4"
+num-traits = "0.2.17"
+flate2 = "1.0.28"
+async-stream = "0.3.5"
+tempfile = "3.9.0"
+futures-util = "0.3.30"
+uuid = { version = "1.6.1", features = ["v4"] }
+mime_guess = "2.0.4"

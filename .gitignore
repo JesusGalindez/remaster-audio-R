@@ -24,3 +24,8 @@ folder_action_error.log
 .idea/
 .agents/
 graphify-out/
+
+
+# Added by cargo
+
+/target
