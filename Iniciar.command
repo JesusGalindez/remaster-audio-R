@@ -32,11 +32,19 @@ fi
 
 # 3. Compilar el servidor de Rust si no existe
 if [ ! -f "target/release/remaster_audio" ]; then
-    echo "Compilando el motor en Rust para máxima velocidad (solo la primera vez)..."
     # Asegurar que las variables de entorno de Rust estén en el PATH
     if [ -f "$HOME/.cargo/env" ]; then
         source "$HOME/.cargo/env"
     fi
+    
+    # Si cargo sigue sin estar disponible, instalar Rust automáticamente
+    if ! command -v cargo &> /dev/null; then
+        echo "[INFO] Rust no está instalado en este sistema. Instalándolo automáticamente..."
+        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+        source "$HOME/.cargo/env"
+    fi
+
+    echo "Compilando el motor en Rust para máxima velocidad (solo la primera vez)..."
     cargo build --release
     if [ $? -ne 0 ]; then
         echo "ERROR: Falló la compilación del motor en Rust."
